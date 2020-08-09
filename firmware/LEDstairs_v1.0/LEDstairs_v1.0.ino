@@ -8,15 +8,15 @@
 */
 
 #define STEP_AMOUNT 12     // количество ступенек
-#define STEP_LENGTH 8    // количество чипов WS2811 на ступеньку
+#define STEP_LENGTH 8      // количество чипов WS2811 на ступеньку
 
-#define AUTO_BRIGHT 0     // автояркость 0/1 вкл/выкл (с фоторезистором)
+#define AUTO_BRIGHT 0      // автояркость 0/1 вкл/выкл (с фоторезистором)
 #define CUSTOM_BRIGHT 150  // ручная яркость
 
 #define FADR_SPEED 500
-#define START_EFFECT   RUNNING    // режим при старте COLOR, RAINBOW, FIRE, RUNNING
-#define ROTATE_EFFECTS 1      // 0/1 - автосмена эффектов
-#define TIMEOUT 15            // секунд, таймаут выключения ступенек, если не сработал конечный датчик
+#define START_EFFECT       RUNNING  // режим при старте COLOR, RAINBOW, FIRE, RUNNING
+#define ROTATE_EFFECTS     1        // 0/1 - автосмена эффектов
+#define TIMEOUT 30                  // секунд, таймаут выключения ступенек, если не сработал конечный датчик
 
 // пины
 // если перепутаны сенсоры - можно поменять их местами в коде! Вот тут
@@ -28,9 +28,6 @@
 #define DIR_S2E   0     // Start to End
 #define DIR_E2S   1     // End to Start
 
-#define PWR_ON_2_OFF   0     // Turn on power
-#define PWR_OFF_2_ON   1     // Turn off power
-
 typedef enum {EVENT_NONE,
               EVENT_START,
               EVENT_END,
@@ -40,6 +37,8 @@ typedef enum {EVENT_NONE,
 // для разработчиков
 #define ORDER_BRG       // порядок цветов ORDER_GRB / ORDER_RGB / ORDER_BRG
 #define COLOR_DEBTH 3   // цветовая глубина: 1, 2, 3 (в байтах)
+//#define DEBUG         // Uncomment for debug prints
+
 #include "microLED.h"
 #define NUMLEDS STEP_AMOUNT * STEP_LENGTH // кол-во светодиодов
 LEDdata leds[NUMLEDS];  // буфер ленты
@@ -55,8 +54,14 @@ enum {RAINBOW, FIRE, COLOR, RUNNING, LAST_ONE} gCurEffect = START_EFFECT;
 #define EFFECT_SET(_new_eff_) gCurEffect = _new_eff_
 #define TOTAL_EFFECTS (LAST_ONE)
 
-// ========================
-byte effectCounter;
+// ==== Debug tools =====
+#ifdef DEBUG
+#define DPRINT(_prm_)    Serial.print(_prm_)
+#define DPRINTLN(_prm_)  Serial.println(_prm_)
+#else
+#define DPRINT(_prm_)
+#define DPRINTLN(_prm_)
+#endif
 
 // ==== удобные макросы ====
 #define FOR_i(from, to) for(int i = (from); i < (to); i++)
@@ -104,15 +109,13 @@ void setup() {
   delay(100);
   strip.clear();
   strip.show();
-  Serial.print("setup: Current effect "); Serial.println(EFFECT_GET());
+  DPRINT("setup: Current effect "); DPRINTLN(EFFECT_GET());
 }
 
 void loop() {
   getBright();
   processEvent( getEvent() );
   effectFlow();
-  //readSensors();
-  //effectFlow();
 }
 
 #define IS_MODE( _check_mode_ ) systemState == (_check_mode_)
@@ -134,10 +137,9 @@ void getBright() {
 void effectFlow() {
   if (IS_MODE(S_WORK)) {
       EVERY_MS(effSpeed) {
-        //Serial.print("effectFlow: ");Serial.println(EFFECT_GET());
         switch (EFFECT_GET()) {
           case COLOR: staticColor(effDir, 0, STEP_AMOUNT-1); break;
-          case RAINBOW: rainbowStripes(effDir, effDir == DIR_S2E ? 0 : STEP_AMOUNT-1, STEP_AMOUNT); break; // rainbowStripes - приёмный
+          case RAINBOW: rainbowStripes(effDir, effDir == DIR_S2E ? 0 : STEP_AMOUNT-1, STEP_AMOUNT); break;
           case FIRE: fireStairs(effDir, 0, 0); break;
           case RUNNING: runningStep(effDir, 0, STEP_AMOUNT); break;
         }
@@ -165,32 +167,31 @@ event_t getEvent(void) {
   // СЕНСОР У НАЧАЛА ЛЕСТНИЦЫ
   if (digitalRead(SENSOR_START)) {
     if ( sensor_active ) {
-      Serial.print("getEvent: Start sensor detected "); Serial.println(SENSOR_START);
+      DPRINT("getEvent: Start sensor detected "); DPRINTLN(SENSOR_START);
       sensor_active = false;       // Prevent from double initialization till timeout event
       last_event_ts = millis();    // Save event time
-      Serial.print("getEvent: Event time "); Serial.println(last_event_ts);
+      DPRINT("getEvent: Event time "); DPRINTLN(last_event_ts);
       return EVENT_START;
     }
   }
   // СЕНСОР У КОНЦА ЛЕСТНИЦЫ
   if (digitalRead(SENSOR_END)) {
     if (sensor_active) {
-      Serial.print("getEvent: End sensor detected "); Serial.println(SENSOR_END);
+      DPRINT("getEvent: End sensor detected "); DPRINTLN(SENSOR_END);
       sensor_active = false;     // Prevent from double initialization till next timeout event
       last_event_ts = millis();  // Save event time
-      Serial.print("getEvent: Event time "); Serial.println(last_event_ts);
+      DPRINT("getEvent: Event time "); DPRINTLN(last_event_ts);
       return EVENT_END;
     }
   }
 
   if ( IS_MODE(S_WORK) && (millis() - last_event_ts >= (TIMEOUT * 1000)) ) {
-    Serial.print("getEvent: Timeout event: "); Serial.println(millis());
+    DPRINT("getEvent: Timeout event: "); DPRINTLN(millis());
     sensor_active = true;
     last_event_ts = millis();  // Save event time
     return EVENT_TIMEOUT;
   }
 
-//  Serial.println("getEvent: No events");
   return EVENT_NONE;
 }
 
@@ -200,7 +201,7 @@ int turnOn( int eff_dir, int effect ) {
   int step_start, step_inc, step_end;
   int step_counter = STEP_AMOUNT;
 
-  Serial.print("turnOn: direction ");Serial.print(eff_dir); Serial.print(" effect ");Serial.println(effect);
+  DPRINT("turnOn: direction ");DPRINT(eff_dir); DPRINT(" effect ");DPRINTLN(effect);
   effDir = eff_dir;
   if (eff_dir == DIR_S2E) {
     step_start = 0;
@@ -212,10 +213,10 @@ int turnOn( int eff_dir, int effect ) {
     step_end = 0;
   }
   step_counter = step_start;
-  Serial.print("turnOn: start ");Serial.print(step_start); Serial.print(" stop ");Serial.println(step_end);
+  DPRINT("turnOn: start ");DPRINT(step_start); DPRINT(" stop ");DPRINTLN(step_end);
   while( step_counter != step_end ) {
     EVERY_MS(FADR_SPEED) {
-      Serial.print("turnOn: cycle ");Serial.println(step_counter);
+      DPRINT("turnOn: cycle ");DPRINTLN(step_counter);
       switch (effect) {
         case FIRE:
           fireStairs(eff_dir, 0, 0);
@@ -236,15 +237,14 @@ int turnOn( int eff_dir, int effect ) {
       step_counter += step_inc;
     }
   }
-  Serial.println("turnOn: Done");
+  DPRINTLN("turnOn: Done");
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 #define FADEOUT_STEP   3
 
 int turnOff( int eff_dir, int effect ) {
-  Serial.print("turnOff: direction ");Serial.print(eff_dir);
-  Serial.print(" effect ");Serial.println(effect);
+  DPRINT("turnOff: direction "); DPRINT(eff_dir); DPRINT(" effect "); DPRINTLN(effect);
   int fadeout_bright = curBright;
 
   while( fadeout_bright >= FADEOUT_STEP ) {
@@ -257,7 +257,7 @@ int turnOff( int eff_dir, int effect ) {
   strip.clear();
   strip.setBrightness(curBright);
   strip.show();
-  Serial.println("turnOff: Done");
+  DPRINTLN("turnOff: Done");
   return 0;
 }
 
@@ -270,7 +270,7 @@ int processEvent( event_t event ) {
 
   switch (event) {
     case EVENT_START:
-      Serial.println("processEvent: event start");
+      DPRINTLN("processEvent: event start");
       switch (systemState) {
         case S_WORK:
           turnOff(DIR_E2S, EFFECT_GET());
@@ -283,7 +283,7 @@ int processEvent( event_t event ) {
       }
       break;
     case EVENT_END:
-      Serial.println("processEvent: event end");
+      DPRINTLN("processEvent: event end");
       switch (systemState) {
         case S_WORK:
           turnOff(DIR_S2E, EFFECT_GET());
@@ -296,7 +296,7 @@ int processEvent( event_t event ) {
       }
       break;
     case EVENT_TIMEOUT:
-      Serial.println("processEvent: event timeout");
+      DPRINTLN("processEvent: event timeout");
       // Look on what was the last event to set effect direction for fadeout
       switch (prev_event) {
         case EVENT_START:
@@ -326,13 +326,13 @@ int processEvent( event_t event ) {
   }
 
   if ( IS_MODE(S_IDLE) && ROTATE_EFFECTS ) {
-    Serial.print("processEvent: Rotating effects -> ");Serial.println(EFFECT_GET());
+    DPRINT("processEvent: Rotating effects -> ");DPRINTLN(EFFECT_GET());
     currEff = EFFECT_GET();
     EFFECT_SET(++currEff % TOTAL_EFFECTS);
   }
   // Save meaningfull event
   prev_event = event;
-  Serial.println("processEvent: event processed");
+  DPRINTLN("processEvent: event processed");
   return 0;
 }
 
