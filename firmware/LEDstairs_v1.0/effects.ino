@@ -37,18 +37,19 @@ CRGB getFireColor(int val) {
 }
 
 // ========= смена цвета общая
-void staticColor(byte eff_dir, byte from, byte to) {
-  int i;
+void staticColor(byte eff_dir, byte from, byte num) {
+  volatile int i;
   static uint32_t colorCounter = 0;
 
+  DPRINT("staticColor: dir "); DPRINT(eff_dir); DPRINT(" from "); DPRINT(from); DPRINT(" num "); DPRINTLN(num);
   effSpeed = 100;
   colorCounter += 4;
-  if ( from < to ) {
-    for(i = from; i <= to; i++) {
+  if ( eff_dir == DIR_S2E ) {
+    for( i = from; i < from + num; i++) {
       fillStep(i, mHSV(colorCounter, 255, 255));
     }
   } else {
-    for(i = from; i >= to; i--) {
+    for( i = from; i > from-num; i-- ) {
       fillStep(i, mHSV(colorCounter, 255, 255));
     }
   }

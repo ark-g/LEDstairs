@@ -138,7 +138,7 @@ void effectFlow() {
   if (IS_MODE(S_WORK)) {
       EVERY_MS(effSpeed) {
         switch (EFFECT_GET()) {
-          case COLOR: staticColor(effDir, 0, STEP_AMOUNT-1); break;
+          case COLOR: staticColor(effDir, effDir == DIR_S2E ? 0 : STEP_AMOUNT-1, STEP_AMOUNT); break;
           case RAINBOW: rainbowStripes(effDir, effDir == DIR_S2E ? 0 : STEP_AMOUNT-1, STEP_AMOUNT); break;
           case FIRE: fireStairs(effDir, 0, 0); break;
           case RUNNING: runningStep(effDir, 0, STEP_AMOUNT); break;
@@ -227,7 +227,7 @@ int turnOn( int eff_dir, int effect ) {
           runningStep(eff_dir, 0, STEP_AMOUNT);
           break;
         case COLOR:
-          staticColor(eff_dir, step_start, step_counter);
+          staticColor(eff_dir, step_start, abs(step_start - step_counter));
           break;
         case RAINBOW:
           rainbowStripes(eff_dir, step_start, abs(step_start - step_counter));
