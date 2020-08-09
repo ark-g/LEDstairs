@@ -1,12 +1,11 @@
 // плавный включатель-выключатель эффектов
-void stepFader(bool dir, bool state) {
-  // dir 0 на себя, 1 от себя
-  // state 0 рост, 1 выкл
-  // 0 0
-  // 0 1
-  // 1 0
-  // 1 1
-  byte mode = state | (dir << 1);
+void stepFader(byte eff_direction, byte pwr_transition) {
+  // eff_direction is one of:
+  //    DIR_S2E        Start to End
+  //    DIR_E2S        End to Start
+  // pwr_transition is one of:
+  //    PWR_ON_2_OFF   Turn on power
+  //    PWR_OFF_2_ON   Turn off power
   byte counter = 0;
   while (1) {
     EVERY_MS(FADR_SPEED) {
@@ -14,14 +13,9 @@ void stepFader(bool dir, bool state) {
       Serial.print("stepFader: Current effect "); Serial.println(curEffect);
       switch (curEffect) {
         case RUNNING:
-          switch (mode) {
-            case 0: runningStep( 1, 0, counter ); break;
-            case 1: runningStep( 1, counter, STEP_AMOUNT); break;
-            case 2: runningStep(-1, STEP_AMOUNT - counter, STEP_AMOUNT); break;
-            case 3: runningStep(-1, 0, STEP_AMOUNT - counter); break;
-          }
-          ;
+            runningStepInit( eff_direction, pwr_transition, counter );
           break;
+ /*
         case COLOR:
           switch (mode) {
             case 0: staticColor(1, 0, counter); break;
@@ -38,8 +32,9 @@ void stepFader(bool dir, bool state) {
             case 3: rainbowStripes(1, 0, STEP_AMOUNT - counter); break;
           }
           break;
+ */
         case FIRE:
-          if (state) {
+          if (pwr_transition == PWR_OFF_2_ON ) {
             int changeBright = curBright;
             while (1) {
               EVERY_MS(50) {
@@ -74,7 +69,7 @@ void stepFader(bool dir, bool state) {
       if (counter == STEP_AMOUNT) break;
     }
   }
-  if (state == 1) {
+  if (pwr_transition == PWR_OFF_2_ON) {
     strip.clear();
     strip.show();
   }
@@ -132,24 +127,37 @@ void staticColor(int8_t dir, byte from, byte to) {
 }
 
 // ========= Running
-void runningStep(int8_t dir, byte from, byte to) {
-  effSpeed = 200;
+void runningStepInit(byte eff_dir, byte pwr_transition, byte step_num) {
+  uint32_t color = ( step_num % 3 == 0 ) ? WHITE : BLACK;
+  byte step_idx = (eff_dir == DIR_S2E) ? step_num : STEP_AMOUNT - step_num;
+  Serial.print("Step: "); Serial.print(step_idx); Serial.print(" color "); Serial.println(color);
+  fillStep(step_idx, color);
+}
+
+void runningStep(byte eff_dir, byte from, byte to) {
+  effSpeed = 100;
   static int cntr = 0;
-  int k;
+  LEDdata color;
+  int i, k;
   Serial.print(from); Serial.print(" to "); Serial.println(to);
-  if ( ++cntr % 3 == 0 ) {
-    Serial.println("0 - line 255 color");
-    fillStep(0, 255);
-  } else {
-    Serial.println("0 - line 0 color");
-    fillStep(0, 0);
-  }
-  FOR_i(1, STEP_AMOUNT) {
-    for( k = i * STEP_LENGTH; k < i * STEP_LENGTH + STEP_LENGTH; k++) {
-      leds[k] = leds[ k - STEP_LENGTH ];
+  color = ( cntr % 3 == 0 ) ? WHITE : BLACK;
+  if ( eff_dir == DIR_S2E ) {
+    for( i = STEP_AMOUNT-1; i >= 1; i--) {
+      for( k = i * STEP_LENGTH; k < i * STEP_LENGTH + STEP_LENGTH; k++) {
+        leds[k] = leds[k - STEP_LENGTH];
+      }
+      Serial.print(i-1); Serial.print(" -> "); Serial.println(i);
     }
-    Serial.print(i-1); Serial.print(" -> "); Serial.println(i);
+    fillStep(0, color);
+  } else {
+    for( i = 0; i <= STEP_AMOUNT-2; i++ ) {
+      for( k = i * STEP_LENGTH; k < i * STEP_LENGTH + STEP_LENGTH; k++) {
+        leds[k] = leds[k + STEP_LENGTH];
+      }
+    }
+    fillStep(STEP_AMOUNT-1, color);
   }
+  cntr++;
 }
 
 // ========= полоски радужные
@@ -161,7 +169,7 @@ void rainbowStripes(int8_t dir, byte from, byte to) {
   FOR_i(0, STEP_AMOUNT) {
     thisBright = 255;
     if (i < from || i >= to) thisBright = 0;
-    fillStep((dir > 0) ? (i) : (STEP_AMOUNT - 1 - i), mHSV(colorCounter + (float)i * 255 / STEP_AMOUNT, 255, thisBright));
+    fillStep((dir == DIR_S2E) ? (i) : (STEP_AMOUNT - 1 - i), mHSV(colorCounter + (float)i * 255 / STEP_AMOUNT, 255, thisBright));
   }
 }
 

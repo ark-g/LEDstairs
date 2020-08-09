@@ -14,9 +14,9 @@
 #define CUSTOM_BRIGHT 150  // ручная яркость
 
 #define FADR_SPEED 500
-#define START_EFFECT   RAINBOW    // режим при старте COLOR, RAINBOW, FIRE
-#define ROTATE_EFFECTS 1      // 0/1 - автосмена эффектов
-#define TIMEOUT 20            // секунд, таймаут выключения ступенек, если не сработал конечный датчик
+#define START_EFFECT   RUNNING    // режим при старте COLOR, RAINBOW, FIRE
+#define ROTATE_EFFECTS 0      // 0/1 - автосмена эффектов
+#define TIMEOUT 15            // секунд, таймаут выключения ступенек, если не сработал конечный датчик
 
 // пины
 // если перепутаны сенсоры - можно поменять их местами в коде! Вот тут
@@ -24,6 +24,12 @@
 #define SENSOR_END 2
 #define STRIP_PIN 13    // пин ленты
 #define PHOTO_PIN A0
+
+#define DIR_S2E   0     // Start to End
+#define DIR_E2S   1     // End to Start
+
+#define PWR_ON_2_OFF   0     // Turn on power
+#define PWR_OFF_2_ON   1     // Turn off power
 
 // для разработчиков
 #define ORDER_BRG       // порядок цветов ORDER_GRB / ORDER_RGB / ORDER_BRG
@@ -156,17 +162,8 @@ void readSensors() {
   }
 
   EVERY_MS(50) {
-    Serial.print("readSensors: Current effect "); Serial.println(curEffect);
-    Serial.print("readSensors: Now -> ");Serial.println(millis());
     if (IS_MODE(S_IDLE) && sensor_fired != 0) {
       // Switch effect while on idle
-      if (sensor_fired == SENSOR_START) {
-        Serial.println("readSensors: effect direction start -> end");
-        effDir = 1;
-      } else {
-        Serial.println("readSensors: effect direction end -> start");
-        effDir = -1;
-      }
       sensor_fired = 0;
       if (ROTATE_EFFECTS) {
         Serial.print("readSensors: Rotating effects -> ");Serial.println(curEffect);
@@ -180,17 +177,19 @@ void readSensors() {
         sensor_fired = SENSOR_START; // Save which sensor was fired
         activated_from_start = true; // Prevent from double initialization
         timeoutCounter = millis();   // Save event time
+        Serial.println("readSensors: effect direction start -> end");
+        effDir = DIR_S2E;
         Serial.print("readSensors: Event time "); Serial.println(timeoutCounter);
         switch (systemState) {
           case S_IDLE:
             Serial.println("Current mode: IDLE");
-            stepFader(1, 0);
+            stepFader(DIR_S2E, PWR_OFF_2_ON);
             SET_MODE(S_WORK);
             break;
           case S_WORK:
             Serial.println("Current mode: WORK");
-            if (effDir == -1) {
-              stepFader(0, 1);
+            if (effDir == DIR_E2S) {
+              stepFader(DIR_S2E, PWR_ON_2_OFF);
               SET_MODE(S_IDLE);
               strip.clear();
               strip.show();
@@ -206,20 +205,21 @@ void readSensors() {
 
     // СЕНСОР У КОНЦА ЛЕСТНИЦЫ
     if (digitalRead(SENSOR_END)) {
-      Serial.print("readSensors: Start sensor detected "); Serial.println(SENSOR_END);
+      Serial.print("readSensors: End sensor detected "); Serial.println(SENSOR_END);
       if (!activated_from_end) {
         sensor_fired = SENSOR_END; // Save which sensor was fired
         activated_from_end = true; // Prevent from double initialization
         timeoutCounter = millis(); // Save event time
-        Serial.print("readSensors: Event time "); Serial.println(timeoutCounter);
+        Serial.println("readSensors: effect direction end -> start");
+        effDir = DIR_E2S;
         switch (systemState) {
           case S_IDLE:
             Serial.println("Current mode: IDLE");
-            stepFader(0, 0); SET_MODE(S_WORK); break;
+            stepFader(DIR_E2S, PWR_OFF_2_ON); SET_MODE(S_WORK); break;
           case S_WORK:
             Serial.println("Current mode: WORK");
-            if (effDir == 1) {
-              stepFader(1, 1); SET_MODE(S_IDLE);
+            if (effDir == DIR_S2E) {
+              stepFader(DIR_E2S, PWR_ON_2_OFF); SET_MODE(S_IDLE);
               strip.clear(); strip.show(); return;
             }
             break;
