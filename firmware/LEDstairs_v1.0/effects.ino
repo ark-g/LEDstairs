@@ -13,7 +13,7 @@ void stepFader(byte eff_direction, byte pwr_transition) {
       Serial.print("stepFader: Current effect "); Serial.println(curEffect);
       switch (curEffect) {
         case RUNNING:
-            runningStepInit( eff_direction, pwr_transition, counter );
+            runningStep( eff_direction, 0, STEP_AMOUNT );
           break;
  /*
         case COLOR:
@@ -75,6 +75,30 @@ void stepFader(byte eff_direction, byte pwr_transition) {
   }
 }
 
+int fadeout(int eff_direction, int startBright) {
+  Serial.print("fadeout: Start event ");Serial.println(millis());
+  static int fadeout_bright = CUSTOM_BRIGHT;
+
+  if ( fadeout_bright <= 0 ) {
+    fadeout_bright = startBright;
+  }
+
+  while( fadeout_bright >= 0 ) {
+    EVERY_MS(50) {
+      fadeout_bright -= 2;
+      strip.setBrightness(fadeout_bright);
+      strip.show();
+    }
+  }
+  strip.clear();
+  strip.setBrightness(0);
+  strip.show();
+  fadeout_bright = 0;
+  Serial.print("fadeout: End event ");Serial.println(millis());
+  return 0;
+}
+
+
 // ============== ЭФФЕКТЫ =============
 // ========= огонь
 // настройки пламени
@@ -127,27 +151,20 @@ void staticColor(int8_t dir, byte from, byte to) {
 }
 
 // ========= Running
-void runningStepInit(byte eff_dir, byte pwr_transition, byte step_num) {
-  uint32_t color = ( step_num % 3 == 0 ) ? WHITE : BLACK;
-  byte step_idx = (eff_dir == DIR_S2E) ? step_num : STEP_AMOUNT - step_num;
-  Serial.print("Step: "); Serial.print(step_idx); Serial.print(" color "); Serial.println(color);
-  fillStep(step_idx, color);
-}
-
 void runningStep(byte eff_dir, byte from, byte to) {
   effSpeed = 100;
   static int cntr = 0;
   LEDdata color;
   int i, k;
-  Serial.print(from); Serial.print(" to "); Serial.println(to);
+//  Serial.print(from); Serial.print(" to "); Serial.println(to);
   color = ( cntr % 3 == 0 ) ? WHITE : BLACK;
   if ( eff_dir == DIR_S2E ) {
     for( i = STEP_AMOUNT-1; i >= 1; i--) {
       for( k = i * STEP_LENGTH; k < i * STEP_LENGTH + STEP_LENGTH; k++) {
         leds[k] = leds[k - STEP_LENGTH];
       }
-      Serial.print(i-1); Serial.print(" -> "); Serial.println(i);
     }
+    Serial.println("Shift forward");
     fillStep(0, color);
   } else {
     for( i = 0; i <= STEP_AMOUNT-2; i++ ) {
@@ -155,6 +172,7 @@ void runningStep(byte eff_dir, byte from, byte to) {
         leds[k] = leds[k + STEP_LENGTH];
       }
     }
+    Serial.println("Shift backward");
     fillStep(STEP_AMOUNT-1, color);
   }
   cntr++;

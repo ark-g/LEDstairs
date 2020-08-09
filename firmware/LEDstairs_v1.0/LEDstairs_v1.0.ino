@@ -16,7 +16,7 @@
 #define FADR_SPEED 500
 #define START_EFFECT   RUNNING    // режим при старте COLOR, RAINBOW, FIRE
 #define ROTATE_EFFECTS 0      // 0/1 - автосмена эффектов
-#define TIMEOUT 15            // секунд, таймаут выключения ступенек, если не сработал конечный датчик
+#define TIMEOUT 5            // секунд, таймаут выключения ступенек, если не сработал конечный датчик
 
 // пины
 // если перепутаны сенсоры - можно поменять их местами в коде! Вот тут
@@ -30,6 +30,12 @@
 
 #define PWR_ON_2_OFF   0     // Turn on power
 #define PWR_OFF_2_ON   1     // Turn off power
+
+typedef enum {EVENT_NONE,
+              EVENT_START,
+              EVENT_END,
+              EVENT_TIMEOUT,
+              EVENT_LAST_ONE} event_t;
 
 // для разработчиков
 #define ORDER_BRG       // порядок цветов ORDER_GRB / ORDER_RGB / ORDER_BRG
@@ -98,8 +104,10 @@ void setup() {
 
 void loop() {
   getBright();
-  readSensors();
+  processEvent( getEvent() );
   effectFlow();
+  //readSensors();
+  //effectFlow();
 }
 
 #define IS_MODE( _check_mode_ ) systemState == (_check_mode_)
@@ -132,6 +140,161 @@ void effectFlow() {
   }
 }
 
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Get system event
+#define SENSOR_EVENT_TIMEOUT 2  // Sensor double detection prevention timeout in seconds
+
+event_t getEvent(void) {
+  event_t event = EVENT_NONE;
+  static bool sensor_active = true;
+  static uint32_t last_event_ts = 0;
+
+  // Timeout for double sensor activation
+  if ( sensor_active == false &&
+       (millis() - last_event_ts >= SENSOR_EVENT_TIMEOUT * 1000) ) {
+    sensor_active = true;
+  }
+
+  // СЕНСОР У НАЧАЛА ЛЕСТНИЦЫ
+  if (digitalRead(SENSOR_START)) {
+    if ( sensor_active ) {
+      Serial.print("getEvent: Start sensor detected "); Serial.println(SENSOR_START);
+      sensor_active = false;       // Prevent from double initialization till timeout event
+      last_event_ts = millis();    // Save event time
+      Serial.print("getEvent: Event time "); Serial.println(last_event_ts);
+      return EVENT_START;
+    }
+  }
+  // СЕНСОР У КОНЦА ЛЕСТНИЦЫ
+  if (digitalRead(SENSOR_END)) {
+    if (sensor_active) {
+      Serial.print("getEvent: End sensor detected "); Serial.println(SENSOR_END);
+      sensor_active = false;     // Prevent from double initialization till next timeout event
+      last_event_ts = millis();  // Save event time
+      Serial.print("getEvent: Event time "); Serial.println(last_event_ts);
+      return EVENT_END;
+    }
+  }
+
+  if ( IS_MODE(S_WORK) && (millis() - last_event_ts >= (TIMEOUT * 1000)) ) {
+    Serial.print("getEvent: Timeout event: "); Serial.println(millis());
+    sensor_active = true;
+    last_event_ts = millis();  // Save event time
+    return EVENT_TIMEOUT;
+  }
+
+  return EVENT_NONE;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+int turnOn( int eff_dir, int effect ) {
+  Serial.print("turnOn: direction ");Serial.print(eff_dir);
+  Serial.print(" effect ");Serial.println(effect);
+  effDir = eff_dir;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+#define FADEOUT_STEP   3
+
+int turnOff( int eff_dir, int effect ) {
+  Serial.print("turnOff: direction ");Serial.print(eff_dir);
+  Serial.print(" effect ");Serial.println(effect);
+  int fadeout_bright = curBright;
+
+  while( fadeout_bright >= FADEOUT_STEP ) {
+    EVERY_MS(50) {
+      fadeout_bright -= FADEOUT_STEP;
+      strip.setBrightness(fadeout_bright);
+      strip.show();
+    }
+  }
+  strip.clear();
+  strip.setBrightness(curBright);
+  strip.show();
+  Serial.println("turnOff: Done");
+  return 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+int processEvent( event_t event ) {
+  int effect_dir;
+  static int curr_effect = START_EFFECT;
+  static event_t prev_event;
+
+  switch (event) {
+    case EVENT_START:
+      Serial.println("processEvent: event start");
+      switch (systemState) {
+        case S_WORK:
+          turnOff(DIR_E2S, curr_effect);
+          SET_MODE(S_IDLE);
+          break;
+        case S_IDLE:
+          turnOn(DIR_S2E, curr_effect);
+          SET_MODE(S_WORK);
+          break;
+      }
+      break;
+    case EVENT_END:
+      Serial.println("processEvent: event end");
+      switch (systemState) {
+        case S_WORK:
+          turnOff(DIR_S2E, curr_effect);
+          SET_MODE(S_IDLE);
+          break;
+        case S_IDLE:
+          turnOn(DIR_E2S, curr_effect);
+          SET_MODE(S_WORK);
+          break;
+      }
+      break;
+    case EVENT_TIMEOUT:
+      Serial.println("processEvent: event timeout");
+      // Look on what was the last event to set effect direction for fadeout
+      switch (prev_event) {
+        case EVENT_START:
+          effect_dir = DIR_S2E;
+          break;
+        case EVENT_END:
+          effect_dir = DIR_E2S;
+          break;
+        default:
+          // Should not happen, but just in case ...
+          effect_dir = 4;
+          break;
+      }
+      switch (systemState) {
+        case S_WORK:
+          turnOff(effect_dir, curr_effect);
+          SET_MODE(S_IDLE);
+          break;
+        default:
+          break;
+      }
+      break;
+    case EVENT_NONE:
+    default:
+      // Non meaningfull event - do not count it, just report.
+      return 0;
+  }
+
+  if ( IS_MODE(S_IDLE) && ROTATE_EFFECTS ) {
+    Serial.print("processEvent: Rotating effects -> ");Serial.println(curr_effect);
+    curr_effect = ++curr_effect % TOTAL_EFFECTS;
+  }
+  // Save meaningfull event
+  prev_event = event;
+  return 0;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 // читаем сенсоры
 void readSensors() {
   static bool activated_from_start = false, activated_from_end = false;
@@ -143,18 +306,7 @@ void readSensors() {
     if (millis() - timeoutCounter >= (TIMEOUT * 1000L)) {
       Serial.print("readSensors: Timeout event -> ");Serial.println(millis());
       SET_MODE(S_IDLE);
-      int changeBright = curBright;
-      while (1) {
-        EVERY_MS(50) {
-          changeBright -= 5;
-          if (changeBright < 0) break;
-          strip.setBrightness(changeBright);
-          strip.show();
-        }
-      }
-      strip.clear();
-      strip.setBrightness(curBright);
-      strip.show();
+      fadeout(effDir, curBright);
     }
     else {
 //      Serial.println("readSensors: Wait for timeout");
@@ -162,12 +314,27 @@ void readSensors() {
   }
 
   EVERY_MS(50) {
-    if (IS_MODE(S_IDLE) && sensor_fired != 0) {
-      // Switch effect while on idle
+    if (sensor_fired != 0) {
+      // On sensor activity detection change system state accordingly
+      switch (systemState) {
+        case S_IDLE:
+          Serial.println("Current mode: IDLE");
+          stepFader(effDir, PWR_OFF_2_ON);
+          SET_MODE(S_WORK);
+          break;
+        case S_WORK:
+          Serial.println("Current mode: WORK");
+          fadeout(effDir, curBright);
+          SET_MODE(S_IDLE);
+          break;
+      }
       sensor_fired = 0;
-      if (ROTATE_EFFECTS) {
-        Serial.print("readSensors: Rotating effects -> ");Serial.println(curEffect);
-        curEffect = ++effectCounter % TOTAL_EFFECTS;
+      // Switch effect while on idle
+      if ( IS_MODE(S_IDLE) ) {
+        if (ROTATE_EFFECTS) {
+          Serial.print("readSensors: Rotating effects -> ");Serial.println(curEffect);
+          curEffect = ++effectCounter % TOTAL_EFFECTS;
+        }
       }
     }
     // СЕНСОР У НАЧАЛА ЛЕСТНИЦЫ
@@ -180,23 +347,6 @@ void readSensors() {
         Serial.println("readSensors: effect direction start -> end");
         effDir = DIR_S2E;
         Serial.print("readSensors: Event time "); Serial.println(timeoutCounter);
-        switch (systemState) {
-          case S_IDLE:
-            Serial.println("Current mode: IDLE");
-            stepFader(DIR_S2E, PWR_OFF_2_ON);
-            SET_MODE(S_WORK);
-            break;
-          case S_WORK:
-            Serial.println("Current mode: WORK");
-            if (effDir == DIR_E2S) {
-              stepFader(DIR_S2E, PWR_ON_2_OFF);
-              SET_MODE(S_IDLE);
-              strip.clear();
-              strip.show();
-              return;
-            }
-            break;
-        }
       }
     } else {
       if (activated_from_start)
@@ -212,18 +362,6 @@ void readSensors() {
         timeoutCounter = millis(); // Save event time
         Serial.println("readSensors: effect direction end -> start");
         effDir = DIR_E2S;
-        switch (systemState) {
-          case S_IDLE:
-            Serial.println("Current mode: IDLE");
-            stepFader(DIR_E2S, PWR_OFF_2_ON); SET_MODE(S_WORK); break;
-          case S_WORK:
-            Serial.println("Current mode: WORK");
-            if (effDir == DIR_S2E) {
-              stepFader(DIR_E2S, PWR_ON_2_OFF); SET_MODE(S_IDLE);
-              strip.clear(); strip.show(); return;
-            }
-            break;
-        }
       }
     } else {
       if (activated_from_end)
