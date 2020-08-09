@@ -54,6 +54,10 @@ void staticColor(byte eff_dir, byte from, byte to) {
   }
 }
 
+// On my strips the Blue and Green are swapped in ORDER_GRB scheme (?)
+// For usage with pre-defined colors, like CLR(YELLOW)
+#define CLR(c)   ( ((c)&0xFF0000) | (((c)&0xFF00)>>8) | (((c)&0xFF)<<8)  )
+
 // ========= Running
 void runningStep(byte eff_dir, byte from, byte num) {
   effSpeed = 100;

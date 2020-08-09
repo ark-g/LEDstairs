@@ -35,7 +35,7 @@ typedef enum {EVENT_NONE,
               EVENT_LAST_ONE} event_t;
 
 // для разработчиков
-#define ORDER_BRG       // порядок цветов ORDER_GRB / ORDER_RGB / ORDER_BRG
+#define ORDER_GRB       // порядок цветов ORDER_GRB / ORDER_RGB / ORDER_BRG
 #define COLOR_DEBTH 3   // цветовая глубина: 1, 2, 3 (в байтах)
 //#define DEBUG         // Uncomment for debug prints
 
