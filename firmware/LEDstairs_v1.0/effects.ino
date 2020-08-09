@@ -11,7 +11,17 @@ void stepFader(bool dir, bool state) {
   while (1) {
     EVERY_MS(FADR_SPEED) {
       counter++;
+      Serial.print("stepFader: Current effect "); Serial.println(curEffect);
       switch (curEffect) {
+        case RUNNING:
+          switch (mode) {
+            case 0: runningStep( 1, 0, counter ); break;
+            case 1: runningStep( 1, counter, STEP_AMOUNT); break;
+            case 2: runningStep(-1, STEP_AMOUNT - counter, STEP_AMOUNT); break;
+            case 3: runningStep(-1, 0, STEP_AMOUNT - counter); break;
+          }
+          ;
+          break;
         case COLOR:
           switch (mode) {
             case 0: staticColor(1, 0, counter); break;
@@ -118,6 +128,27 @@ void staticColor(int8_t dir, byte from, byte to) {
     thisBright = 255;
     if (i < from || i >= to) thisBright = 0;
     fillStep(i, mHSV(colorCounter, 255, thisBright));
+  }
+}
+
+// ========= Running
+void runningStep(int8_t dir, byte from, byte to) {
+  effSpeed = 200;
+  static int cntr = 0;
+  int k;
+  Serial.print(from); Serial.print(" to "); Serial.println(to);
+  if ( ++cntr % 3 == 0 ) {
+    Serial.println("0 - line 255 color");
+    fillStep(0, 255);
+  } else {
+    Serial.println("0 - line 0 color");
+    fillStep(0, 0);
+  }
+  FOR_i(1, STEP_AMOUNT) {
+    for( k = i * STEP_LENGTH; k < i * STEP_LENGTH + STEP_LENGTH; k++) {
+      leds[k] = leds[ k - STEP_LENGTH ];
+    }
+    Serial.print(i-1); Serial.print(" -> "); Serial.println(i);
   }
 }
 
