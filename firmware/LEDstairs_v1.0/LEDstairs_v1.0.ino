@@ -14,9 +14,9 @@
 #define CUSTOM_BRIGHT 150  // ручная яркость
 
 #define FADR_SPEED 500
-#define START_EFFECT   RUNNING    // режим при старте COLOR, RAINBOW, FIRE
+#define START_EFFECT   COLOR    // режим при старте COLOR, RAINBOW, FIRE
 #define ROTATE_EFFECTS 0      // 0/1 - автосмена эффектов
-#define TIMEOUT 5            // секунд, таймаут выключения ступенек, если не сработал конечный датчик
+#define TIMEOUT 15            // секунд, таймаут выключения ступенек, если не сработал конечный датчик
 
 // пины
 // если перепутаны сенсоры - можно поменять их местами в коде! Вот тут
@@ -130,7 +130,7 @@ void effectFlow() {
   if (IS_MODE(S_WORK)) {
       EVERY_MS(effSpeed) {
         switch (curEffect) {
-          case COLOR: staticColor(effDir, 0, STEP_AMOUNT); break;
+          case COLOR: staticColor(effDir, 0, STEP_AMOUNT-1); break;
           case RAINBOW: rainbowStripes(-effDir, 0, STEP_AMOUNT); break; // rainbowStripes - приёмный
           case FIRE: fireStairs(effDir, 0, 0); break;
           case RUNNING: runningStep(effDir, 0, STEP_AMOUNT); break;
@@ -190,9 +190,36 @@ event_t getEvent(void) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 int turnOn( int eff_dir, int effect ) {
+  int step_start, step_inc, step_end;
+  int step_counter = STEP_AMOUNT;
+
   Serial.print("turnOn: direction ");Serial.print(eff_dir);
   Serial.print(" effect ");Serial.println(effect);
   effDir = eff_dir;
+  if (eff_dir == DIR_S2E) {
+    step_start = 0;
+    step_inc = 1;
+    step_end = STEP_AMOUNT;
+  } else {
+    step_start = STEP_AMOUNT - 1;
+    step_inc = -1;
+    step_end = 0;
+  }
+  step_counter = step_start;
+  while( step_counter != step_end ) {
+    EVERY_MS(FADR_SPEED) {
+      switch (effect) {
+        case RUNNING:
+          runningStep(eff_dir, 0, STEP_AMOUNT);
+          break;
+        case COLOR:
+          staticColor(eff_dir, step_start, step_counter);
+          break;
+      }
+      strip.show();
+      step_counter += step_inc;
+    }
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -263,7 +290,7 @@ int processEvent( event_t event ) {
           break;
         default:
           // Should not happen, but just in case ...
-          effect_dir = 4;
+          effect_dir = DIR_S2E;
           break;
       }
       switch (systemState) {

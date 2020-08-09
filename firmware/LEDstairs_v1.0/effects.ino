@@ -138,15 +138,23 @@ CRGB getFireColor(int val) {
 }
 
 // ========= смена цвета общая
-void staticColor(int8_t dir, byte from, byte to) {
-  effSpeed = 100;
-  byte thisBright;
+void staticColor(byte eff_dir, byte from, byte to) {
+  int i;
   static byte colorCounter = 0;
-  colorCounter += 2;
-  FOR_i(0, STEP_AMOUNT) {
-    thisBright = 255;
-    if (i < from || i >= to) thisBright = 0;
-    fillStep(i, mHSV(colorCounter, 255, thisBright));
+
+  effSpeed = 100;
+  colorCounter += 4;
+  if ( from < to ) {
+    for(i = from; i <= to; i++) {
+      fillStep(i, mHSV(colorCounter, 255, 255));
+      Serial.print("staticColor: fill step ");Serial.print(i); Serial.print(" color "); Serial.println(colorCounter);
+    }
+  } else {
+    Serial.print("staticColor: from ");Serial.print(from); Serial.print(" to "); Serial.println(to);
+    for(i = from; i >= to; i--) {
+      fillStep(i, mHSV(colorCounter, 255, 255));
+      Serial.print("staticColor: fill step ");Serial.print(i); Serial.print(" color "); Serial.println(colorCounter);
+    }
   }
 }
 
@@ -164,7 +172,7 @@ void runningStep(byte eff_dir, byte from, byte to) {
         leds[k] = leds[k - STEP_LENGTH];
       }
     }
-    Serial.println("Shift forward");
+//    Serial.println("Shift forward");
     fillStep(0, color);
   } else {
     for( i = 0; i <= STEP_AMOUNT-2; i++ ) {
@@ -172,7 +180,7 @@ void runningStep(byte eff_dir, byte from, byte to) {
         leds[k] = leds[k + STEP_LENGTH];
       }
     }
-    Serial.println("Shift backward");
+//    Serial.println("Shift backward");
     fillStep(STEP_AMOUNT-1, color);
   }
   cntr++;
